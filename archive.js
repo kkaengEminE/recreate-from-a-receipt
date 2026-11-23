@@ -17,7 +17,7 @@ const integer = n => Math.max(0, Math.min(50, Math.round(n)));
 function normalize(row, factor=1) {
   if (!row || typeof row.title !== 'string' || !row.title.trim() || !Number.isFinite(row.score)) throw Error('기록 형식을 확인하세요.');
   return {id:String(row.id ?? crypto.randomUUID()), title:row.title, type:String(row.type || '기타'),
-    author:String(row.author || ''), label:String(row.label || ''), note:String(row.note || ''),
+    author:String(row.author || ''), label:String(row.label || ''), note:String(row.note || ''), work:String(row.work || ''),
     reason:String(row.reason || ''), date:String(row.date || ''), ai:integer((Number.isFinite(row.ai)?row.ai:row.score)*factor),
     score:integer(row.score*factor), source:String(row.source || '이전 기록')};
 }
@@ -56,12 +56,13 @@ function edit(row) {
   el('title').textContent=row.title;
   el('reason').textContent=row.reason;
   for (const [field,prop] of Object.entries({score:'score',date:'date',kind:'type',author:'author',labels:'label',note:'note'})) el(field).value=row[prop];
-  el('record').showModal();
+  openConnections(row);
+  if (!el('record').open) el('record').showModal();
 }
 el('edit').onsubmit=e=>{
   e.preventDefault();
   Object.assign(draft,{score:Number(el('score').value), date:el('date').value,type:el('kind').value.trim()||'기타',
-    author:el('author').value,label:el('labels').value,note:el('note').value});
+    author:el('author').value,label:el('labels').value,note:el('note').value,work:el('work').value.trim()});
   const next=[draft,...rows.filter(r=>r.id!==draft.id)];
   localStorage.setItem('archivum-v3-records',JSON.stringify(next));
   rows=next;
