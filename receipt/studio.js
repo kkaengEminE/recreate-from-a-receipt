@@ -73,8 +73,9 @@ function spawn(name,index){
  }
  root.traverse(m=>{m.userData.entity=e;if(!m.isMesh)return;m.material=m.material.clone();m.material.onBeforeCompile=s=>{
  s.uniforms.expiry={value:0};m.userData.uniform=s.uniforms.expiry;
- s.vertexShader='varying float localHeight;\n'+s.vertexShader.replace('#include <project_vertex>','#include <project_vertex>\nlocalHeight=position.y;');
- s.fragmentShader='uniform float expiry; varying float localHeight;\n'+s.fragmentShader.replace('#include <color_fragment>','#include <color_fragment>\nfloat gray=smoothstep(0.,.06,expiry*.52+localHeight-.45); diffuseColor.rgb=mix(diffuseColor.rgb,vec3(dot(diffuseColor.rgb,vec3(.299,.587,.114))),gray);')};
+ s.uniforms.baseHeight={value:root.position.y};m.userData.baseHeight=s.uniforms.baseHeight;
+ s.vertexShader='uniform float baseHeight; varying float localHeight;\n'+s.vertexShader.replace('#include <project_vertex>','#include <project_vertex>\nlocalHeight=(modelMatrix*vec4(transformed,1.)).y-baseHeight;');
+ s.fragmentShader='uniform float expiry; varying float localHeight;\n'+s.fragmentShader.replace('#include <color_fragment>','#include <color_fragment>\nfloat gray=smoothstep(-.06,.0,localHeight-mix('+ (action?'2.1':'.48') +',-.12,expiry)); diffuseColor.rgb=mix(diffuseColor.rgb,vec3(dot(diffuseColor.rgb,vec3(.299,.587,.114))),gray);')};
  });return e
 }
 $('burn').onclick=()=>{const r=records.find(v=>String(v.id)===$('stack').value);if(!r)return;
@@ -101,7 +102,7 @@ const clock=new T.Clock();function frame(){requestAnimationFrame(frame);const dt
  if(e.action){for(const {pivot,arm,sign} of e.figure.limbs)pivot.rotation.x=e.kind==='수영'?Math.sin(now*.005+sign)*(.4+Number(arm)):arm?-.4+.12*Math.sin(now*.003):-1.2}
  if(e===chosen&&remaining>0){e.root.position.x+=dt*2*(keys.has('ArrowRight')-keys.has('ArrowLeft'));e.root.position.y=Math.max(0,e.root.position.y+dt*2*(keys.has('ArrowUp')-keys.has('ArrowDown')))}
  if(!e.action&&(!e.held||remaining<=0)&&!(drag&&chosen===e)){e.velocity-=dt*6;e.root.position.y=Math.max(0,e.root.position.y+e.velocity*dt);if(!e.root.position.y)e.velocity=0}
- e.root.traverse(m=>{if(m.userData.uniform)m.userData.uniform.value=1-Math.max(0,remaining)/60000});
+ e.root.traverse(m=>{if(m.userData.uniform){m.userData.uniform.value=1-Math.max(0,remaining)/60000;m.userData.baseHeight.value=e.root.position.y}});
  if(e===chosen)$('status').textContent=e.kind+' · '+(remaining>0?Math.ceil(remaining/1000)+'초':'비활성');
  }for(const s of [...sparks]){s.t+=dt;s.m.position.y+=dt*1.4;s.m.position.x+=dt*s.dx;s.m.scale.setScalar(Math.max(0,1-s.t));if(s.t>=1){s.m.removeFromParent();s.m.geometry.dispose();s.m.material.dispose();sparks.splice(sparks.indexOf(s),1)}}
  renderer.render(scene,camera)}
