@@ -1,10 +1,20 @@
 import * as T from '../vendor/three.module.min.js';
 const $ = id => document.getElementById(id);
 const canvas = $('field'), scene = new T.Scene(), camera = new T.OrthographicCamera();
-const renderer = new T.WebGLRenderer({canvas,antialias:true});
+let renderer, software = false;
+try {
+ renderer = new T.WebGLRenderer({canvas,antialias:true});
+} catch {
+ const {SVGRenderer} = await import('../vendor/renderers/SVGRenderer.js');
+ renderer = new SVGRenderer();
+ software = true;
+ const frame=document.createElement('div');
+ frame.style.position='relative';
+ canvas.before(frame);frame.append(canvas,renderer.domElement);
+ renderer.domElement.style.cssText='position:absolute;inset:0;pointer-events:none;border-radius:12px';
+}
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
-renderer.shadowMap.enabled=true;
-renderer.shadowMap.type=T.PCFSoftShadowMap;
+if(!software){renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFSoftShadowMap}
 scene.background=new T.Color(0xbcc7b9);
 scene.add(new T.AmbientLight(0xfff1dc,1.7));
 const sun=new T.DirectionalLight(0xffe3b6,3);
@@ -15,7 +25,7 @@ function material(color,map=null){return new T.MeshStandardMaterial({color,map,r
 function mesh(parent,geo,mat,x=0,y=0,z=0){const m=new T.Mesh(geo,mat);parent.add(m);m.position.set(x,y,z);m.castShadow=m.receiveShadow=true;return m}
 function turned(parent,profile,mat,x,y,z){
  const path=new T.SplineCurve(profile.map(([r,h])=>new T.Vector2(r,h)));
- return mesh(parent,new T.LatheGeometry(path.getPoints(40),40),mat,x,y,z);
+ return mesh(parent,new T.LatheGeometry(path.getPoints(software?8:40),software?10:40),mat,x,y,z);
 }
 const grain=document.createElement('canvas');grain.width=grain.height=256;
 const ctx=grain.getContext('2d');ctx.fillStyle='#dbac79';ctx.fillRect(0,0,256,256);
@@ -42,7 +52,9 @@ const floor=mesh(scene,new T.PlaneGeometry(200,200),material(0xbac6b8));floor.ro
 function paper(parent,mat){const shape=new T.Shape();shape.moveTo(-.15,.22);shape.lineTo(.15,.22);
  for(let i=0;i<=12;i++)shape.lineTo(.15-i*.025,-.23+(i%2)*.025);
  shape.closePath();return mesh(parent,new T.ExtrudeGeometry(shape,{depth:.008,bevelEnabled:false}),mat)}
-let records=JSON.parse(localStorage.getItem('receipt-recreate')||'null')??['사과 3개, 귤 2개','수영장 입장','목욕탕','숙박'].map((title,id)=>({title,id,price:5000}));
+let records;
+try {const saved=JSON.parse(localStorage.getItem('receipt-recreate'));if(Array.isArray(saved))records=saved.filter(r=>r&&typeof r.title==='string')}catch{}
+records??=['사과 3개, 귤 2개','수영장 입장','목욕탕','숙박'].map((title,id)=>({title,id,price:5000}));
 let tickets=[],chosen=null;
 function list(rows){$('stack').replaceChildren(...rows.map(r=>new Option(r.title+' · '+Number(r.price).toLocaleString()+'원',r.id)));$('burn').disabled=!rows.length}
 function redraw(){for(const t of tickets){t.removeFromParent();t.geometry.dispose();t.material.map.dispose();t.material.dispose()}tickets=[];
@@ -51,7 +63,7 @@ function redraw(){for(const t of tickets){t.removeFromParent();t.geometry.dispos
  c.fillStyle='#fff3d7';c.fillRect(0,0,128,180);c.fillStyle='#342d28';c.font='bold 18px sans-serif';c.fillText('RECEIPT',10,30);c.font='13px sans-serif';c.fillText(r.title,8,62,112);
  for(let j=0;j<32;j++)c.fillRect(8+j*3.4,105,1+j%3,28);
  const t=paper(garment.body,material(0xffffff,new T.CanvasTexture(sheet)));t.rotation.y=angle;t.position.set(.38*Math.sin(angle),2.16-(Math.floor(i/8)%3)*.31,.38*Math.cos(angle));t.userData.record=r;tickets.push(t)});
- list(records);localStorage.setItem('receipt-recreate',JSON.stringify(records))}
+ list(records);try{localStorage.setItem('receipt-recreate',JSON.stringify(records))}catch{$('status').textContent='이 브라우저에서는 영수증이 현재 탭에만 보관됩니다.'}}
 $('form').onsubmit=e=>{e.preventDefault();const title=$('description').value.trim();if(!title)return;records.unshift({title,price:Number($('price').value),id:Date.now()});redraw();e.target.reset()};
 const entities=[],keys=new Set(),sparks=[];
 const kinds=[[/수영/,'수영'],[/목욕|온천/,'목욕'],[/사우나/,'사우나'],[/마사지/,'마사지'],[/숙박|호텔|펜션/,'숙박'],[/사과/,'사과'],[/귤|오렌지|자몽|한라봉|천혜향/,'귤']];
@@ -96,7 +108,8 @@ onkeydown=e=>{if(chosen&&Date.now()<chosen.end&&e.key.startsWith('Arrow')&&!['IN
 onkeyup=e=>keys.delete(e.key);onblur=()=>keys.clear();
 const clock=new T.Clock();function frame(){requestAnimationFrame(frame);const dt=Math.min(.05,clock.getDelta()),now=Date.now(),ratio=canvas.clientWidth/canvas.clientHeight;
  const h=Math.max(2.12,3.85/ratio);camera.left=-h*ratio;camera.right=h*ratio;camera.top=h;camera.bottom=-h;camera.updateProjectionMatrix();
- if(canvas.width!==Math.floor(canvas.clientWidth*renderer.getPixelRatio())||canvas.height!==Math.floor(canvas.clientHeight*renderer.getPixelRatio()))renderer.setSize(canvas.clientWidth,canvas.clientHeight,false);
+ const size=canvas.clientWidth+'x'+canvas.clientHeight;
+ if(canvas.dataset.size!==size){renderer.setSize(canvas.clientWidth,canvas.clientHeight,false);canvas.dataset.size=size}
  for(const e of [...entities]){const remaining=e.end-now;
  if(e.action&&remaining<=0){e.root.removeFromParent();entities.splice(entities.indexOf(e),1);actor.body.visible=!entities.some(v=>v.action);if(chosen===e)chosen=null;continue}
  if(e.action){for(const {pivot,arm,sign} of e.figure.limbs)pivot.rotation.x=e.kind==='수영'?Math.sin(now*.005+sign)*(.4+Number(arm)):arm?-.4+.12*Math.sin(now*.003):-1.2}
