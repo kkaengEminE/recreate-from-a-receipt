@@ -90,33 +90,55 @@ function spawn(name,index){
  s.fragmentShader='uniform float expiry; varying float localHeight;\n'+s.fragmentShader.replace('#include <color_fragment>','#include <color_fragment>\nfloat gray=smoothstep(-.06,.0,localHeight-mix('+ (action?'2.1':'.48') +',-.12,expiry)); diffuseColor.rgb=mix(diffuseColor.rgb,vec3(dot(diffuseColor.rgb,vec3(.299,.587,.114))),gray);')};
  });return e
 }
-$('burn').onclick=()=>{const r=records.find(v=>String(v.id)===$('stack').value);if(!r)return;
+let useMode=false,burning=false,yaw=0,pitch=.22;
+function view(use){
+ useMode=use;chosen=null;drag=null;
+ garment.body.visible=!use;
+ $('form').hidden=use;$('usePanel').hidden=!use;
+ $('heading').textContent=use?'붙여 둔 영수증':'영수증 등록';
+ $('hint').textContent=use?'빈 곳을 드래그해 장면을 돌리세요. 대상을 누르면 방향키로 조종할 수 있습니다.':'인형을 드래그해 돌리고 붙은 영수증을 확인하세요.';
+ $('registerTab').setAttribute('aria-pressed',!use);$('useTab').setAttribute('aria-pressed',use);
+ $('status').textContent='';if(use&&!$('stack').value)list(records);
+}
+$('registerTab').onclick=()=>view(false);$('useTab').onclick=()=>view(true);
+for(let i=0;i<6;i++){const flame=document.createElement('i');flame.style.left=i*14+'%';flame.style.animationDelay=-i*.069+'s';document.querySelector('.flames').append(flame)}
+$('burn').onclick=async()=>{const r=records.find(v=>String(v.id)===$('stack').value);if(!r||burning)return;
+ burning=true;$('burn').disabled=true;$('registerTab').disabled=true;
+ $('slip').textContent=r.title;$('fire').hidden=false;
  const ticket=tickets.find(t=>t.userData.record===r);const origin=ticket.getWorldPosition(new T.Vector3());
  for(let i=0;i<36;i++){const m=mesh(scene,new T.TetrahedronGeometry(.025+Math.random()*.035),new T.MeshBasicMaterial({color:i%2?0xff7b20:0xffd65c}));m.position.copy(origin);sparks.push({m,t:0,dx:Math.random()-.5})}
+ await new Promise(resolve=>setTimeout(resolve,1700));$('fire').hidden=true;
  records=records.filter(v=>v!==r);redraw();let i=0;
+ burning=false;$('registerTab').disabled=false;
  for(const line of r.title.split(/[,，+\n]/)){const count=Math.min(50,Number(line.match(/(\d+)\s*(개|장|병|마리)/)?.[1]??1));for(let j=0;j<count;j++)spawn(line,i++)}
  $('status').textContent=r.title+' 재계상 · 대상을 클릭해 조종하세요.'};
 const ray=new T.Raycaster();let drag=null;
 function point(e){const box=canvas.getBoundingClientRect();ray.setFromCamera(new T.Vector2((e.clientX-box.left)/box.width*2-1,1-(e.clientY-box.top)/box.height*2),camera)}
-canvas.onpointerdown=e=>{point(e);const hit=ray.intersectObjects([...tickets,...entities.map(v=>v.root)],true)[0]?.object;
+canvas.onpointerdown=e=>{point(e);const hit=ray.intersectObjects(useMode?entities.map(v=>v.root):tickets,true)[0]?.object;
  chosen=hit?.userData.entity??null;drag={x:e.clientX,y:e.clientY,start:e.clientX,ticket:hit?.userData.record};canvas.setPointerCapture(e.pointerId)};
 canvas.onpointermove=e=>{if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
- if(chosen){chosen.held=true;chosen.root.position.x+=dx*(camera.right-camera.left)/canvas.clientWidth;chosen.root.position.y=Math.max(0,chosen.root.position.y-dy*(camera.top-camera.bottom)/canvas.clientHeight)}
+ if(chosen){chosen.held=true;const distance=dx*(camera.right-camera.left)/canvas.clientWidth;chosen.root.position.x+=distance*Math.cos(yaw);chosen.root.position.z-=distance*Math.sin(yaw);chosen.root.position.y=Math.max(0,chosen.root.position.y-dy*(camera.top-camera.bottom)/canvas.clientHeight)}
+ else if(useMode){yaw-=dx*.012;pitch=Math.max(.06,Math.min(1.25,pitch+dy*.008))}
  else garment.body.rotation.y+=dx*.014;drag.x=e.clientX;drag.y=e.clientY};
+canvas.onpointercancel=()=>{drag=null};
 canvas.onpointerup=()=>{if(drag?.ticket&&Math.abs(drag.start-drag.x)<5){const i=records.indexOf(drag.ticket);list(records.filter((_,j)=>Math.min((j-i+80000)%8,(i-j+80000)%8)<=1));$('stack').value=drag.ticket.id}drag=null};
 onkeydown=e=>{if(chosen&&Date.now()<chosen.end&&e.key.startsWith('Arrow')&&!['INPUT','SELECT'].includes(document.activeElement.tagName)){e.preventDefault();keys.add(e.key);chosen.held=true}};
 onkeyup=e=>keys.delete(e.key);onblur=()=>keys.clear();
 const clock=new T.Clock();function frame(){requestAnimationFrame(frame);const dt=Math.min(.05,clock.getDelta()),now=Date.now(),ratio=canvas.clientWidth/canvas.clientHeight;
- const h=Math.max(2.12,3.85/ratio);camera.left=-h*ratio;camera.right=h*ratio;camera.top=h;camera.bottom=-h;camera.updateProjectionMatrix();
+ const center=useMode?1.8:-2,angle=useMode?yaw:0,elevation=useMode?pitch:.22;
+ camera.position.set(center+10*Math.sin(angle)*Math.cos(elevation),1.6+10*Math.sin(elevation),10*Math.cos(angle)*Math.cos(elevation));camera.lookAt(center,1.6,0);
+ actor.body.visible=useMode&&!entities.some(v=>v.action&&v.end>now);
+ for(const entity of entities)entity.root.visible=useMode;
+ const h=Math.max(2.12,2/ratio);camera.left=-h*ratio;camera.right=h*ratio;camera.top=h;camera.bottom=-h;camera.updateProjectionMatrix();
  const size=canvas.clientWidth+'x'+canvas.clientHeight;
  if(canvas.dataset.size!==size){renderer.setSize(canvas.clientWidth,canvas.clientHeight,false);canvas.dataset.size=size}
  for(const e of [...entities]){const remaining=e.end-now;
  if(e.action&&remaining<=0){e.root.removeFromParent();entities.splice(entities.indexOf(e),1);actor.body.visible=!entities.some(v=>v.action);if(chosen===e)chosen=null;continue}
  if(e.action){for(const {pivot,arm,sign} of e.figure.limbs)pivot.rotation.x=e.kind==='수영'?Math.sin(now*.005+sign)*(.4+Number(arm)):arm?-.4+.12*Math.sin(now*.003):-1.2}
- if(e===chosen&&remaining>0){e.root.position.x+=dt*2*(keys.has('ArrowRight')-keys.has('ArrowLeft'));e.root.position.y=Math.max(0,e.root.position.y+dt*2*(keys.has('ArrowUp')-keys.has('ArrowDown')))}
+ if(e===chosen&&remaining>0){const distance=dt*2*(keys.has('ArrowRight')-keys.has('ArrowLeft'));e.root.position.x+=distance*Math.cos(yaw);e.root.position.z-=distance*Math.sin(yaw);e.root.position.y=Math.max(0,e.root.position.y+dt*2*(keys.has('ArrowUp')-keys.has('ArrowDown')))}
  if(!e.action&&(!e.held||remaining<=0)&&!(drag&&chosen===e)){e.velocity-=dt*6;e.root.position.y=Math.max(0,e.root.position.y+e.velocity*dt);if(!e.root.position.y)e.velocity=0}
  e.root.traverse(m=>{if(m.userData.uniform){m.userData.uniform.value=1-Math.max(0,remaining)/60000;m.userData.baseHeight.value=e.root.position.y}});
  if(e===chosen)$('status').textContent=e.kind+' · '+(remaining>0?Math.ceil(remaining/1000)+'초':'비활성');
  }for(const s of [...sparks]){s.t+=dt;s.m.position.y+=dt*1.4;s.m.position.x+=dt*s.dx;s.m.scale.setScalar(Math.max(0,1-s.t));if(s.t>=1){s.m.removeFromParent();s.m.geometry.dispose();s.m.material.dispose();sparks.splice(sparks.indexOf(s),1)}}
  renderer.render(scene,camera)}
-redraw();frame();
+redraw();view(false);frame();
