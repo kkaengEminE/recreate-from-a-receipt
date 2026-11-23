@@ -55,6 +55,14 @@ function paper(parent,mat){const shape=new T.Shape();shape.moveTo(-.15,.22);shap
 let records;
 try {const saved=JSON.parse(localStorage.getItem('receipt-recreate'));if(Array.isArray(saved))records=saved.filter(r=>r&&typeof r.title==='string')}catch{}
 records??=['사과 3개, 귤 2개','수영장 입장','목욕탕','숙박'].map((title,id)=>({title,id,price:5000}));
+const wardrobe=[['이삿짐 트럭',78000],['소품 칼',8500],['작은 집',28000000],['사과 3개',4800],['수영장 입장',7000],['귤 5개',5500],['목욕탕',9000],['숙박',62000]];
+function dress(){
+ for(let i=0;i<32;i++){const id='sample-cloak-'+i;
+  if(!records.some(r=>r.id===id)){const [title,price]=wardrobe[(i+Math.floor(i/8)*3)%wardrobe.length];records.push({id,title,price})}}
+}
+try{if(!localStorage.getItem('receipt-cloak-v1')){dress();localStorage.setItem('receipt-recreate',JSON.stringify(records));localStorage.setItem('receipt-cloak-v1','1')}}catch{dress()}
+const refill=document.createElement('button');refill.type='button';refill.textContent='예시 영수증 망토 다시 입히기';$('form').append(refill);
+refill.onclick=()=>{dress();redraw()};
 let tickets=[],chosen=null;
 function list(rows){$('stack').replaceChildren(...rows.map(r=>new Option(r.title+' · '+Number(r.price).toLocaleString()+'원',r.id)));$('burn').disabled=!rows.length}
 function redraw(){for(const t of tickets){t.removeFromParent();t.geometry.dispose();t.material.map.dispose();t.material.dispose()}tickets=[];
@@ -62,12 +70,35 @@ function redraw(){for(const t of tickets){t.removeFromParent();t.geometry.dispos
  const sheet=document.createElement('canvas');sheet.width=128;sheet.height=180;const c=sheet.getContext('2d');
  c.fillStyle='#fff3d7';c.fillRect(0,0,128,180);c.fillStyle='#342d28';c.font='bold 18px sans-serif';c.fillText('RECEIPT',10,30);c.font='13px sans-serif';c.fillText(r.title,8,62,112);
  for(let j=0;j<32;j++)c.fillRect(8+j*3.4,105,1+j%3,28);
- const t=paper(garment.body,material(0xffffff,new T.CanvasTexture(sheet)));t.rotation.y=angle;t.position.set(.38*Math.sin(angle),2.16-(Math.floor(i/8)%3)*.31,.38*Math.cos(angle));t.userData.record=r;tickets.push(t)});
+ const row=Math.floor(i/8)%5, radius=.46+row*.05, azimuth=angle+row*.18;
+ const t=paper(garment.body,material(0xffffff,new T.CanvasTexture(sheet)));t.rotation.order='YXZ';t.rotation.y=azimuth;t.rotation.x=-.15;t.scale.set(1.55+row*.12,1.25,1);t.position.set(radius*Math.sin(azimuth),2.18-row*.32,radius*Math.cos(azimuth));t.userData.record=r;tickets.push(t)});
  list(records);try{localStorage.setItem('receipt-recreate',JSON.stringify(records))}catch{$('status').textContent='이 브라우저에서는 영수증이 현재 탭에만 보관됩니다.'}}
 $('form').onsubmit=e=>{e.preventDefault();const title=$('description').value.trim();if(!title)return;records.unshift({title,price:Number($('price').value),id:Date.now()});redraw();e.target.reset()};
 const entities=[],keys=new Set(),sparks=[];
 const kinds=[[/수영/,'수영'],[/목욕|온천/,'목욕'],[/사우나/,'사우나'],[/마사지/,'마사지'],[/숙박|호텔|펜션/,'숙박'],[/사과/,'사과'],[/귤|오렌지|자몽|한라봉|천혜향/,'귤']];
 const actions=['수영','목욕','사우나','마사지','숙박'];
+kinds.unshift([/트럭|화물차/,'트럭'],[/칼|단검/,'소품 칼'],[/작은 집|주택|^집/,'집']);
+function model(root,kind){
+ function block(w,h,d,color,x,y,z){return mesh(root,new T.BoxGeometry(w,h,d),material(color),x,y,z)}
+ function outline(points,depth,color,z){
+  const shape=new T.Shape(points.map(([x,y])=>new T.Vector2(x,y)));
+  return mesh(root,new T.ExtrudeGeometry(shape,{depth,bevelEnabled:true,bevelSize:.015,bevelThickness:.015,bevelSegments:2}),material(color),0,0,z)
+ }
+ if(kind==='트럭'){
+  block(1.55,.13,.66,0x343b3b,0,.25,0);block(.96,.67,.73,0xe1d4b8,-.28,.64,0);
+  outline([[.23,.32],[.77,.32],[.77,.57],[.63,.85],[.23,.85]],.66,0xc44b32,-.33);
+  for(const z of [-.35,.35]){block(.26,.18,.025,0x537384,.43,.69,z);
+   for(const x of [-.53,.56])mesh(root,new T.CylinderGeometry(.18,.18,.13,20),material(0x313132),x,.18,z).rotation.x=Math.PI/2}
+ }else if(kind==='집'){
+  block(1.18,.85,.86,0xe4c8a0,0,.425,0);
+  outline([[-.72,.84],[0,1.36],[.72,.84]],1.04,0x97442f,-.52);
+  block(.23,.52,.04,0x634334,-.25,.26,.44);block(.31,.3,.04,0x77a4a6,.25,.52,.44);
+ }else{
+  outline([[-.09,.28],[.1,.28],[.085,.82],[-.1,1.1]],.045,0xb7c6d2,0);
+  block(.35,.065,.11,0xd2a653,0,.28,.02);block(.12,.25,.11,0x684a42,0,.14,.02);
+ }
+ root.rotation.y=-.34;
+}
 function spawn(name,index){
  const kind=kinds.find(([pattern])=>pattern.test(name))?.[1]??'물품',action=actions.includes(kind);
  const root=group(scene);root.position.set(1.8+(action?0:Math.sin(index*2)*1.2),action?0:3.4+index*.18,action?0:Math.cos(index)*.5);
@@ -79,6 +110,7 @@ function spawn(name,index){
  prop.scale.set(bath?1.4:1,1,bath?.85:1.8);
  if(kind==='수영'||!bath){e.figure.body.rotation.x=Math.PI/2;e.figure.body.scale.setScalar(.55);e.figure.body.position.set(0,.35,-.78)}
  else{e.figure.body.scale.setScalar(.62);e.figure.body.position.y=-.65}
+ }else if(['트럭','소품 칼','집'].includes(kind)){model(root,kind)
  }else{
  turned(root,[[.01,0],[.12,.025],[.21,.17],[.19,.32],[.11,.37],[.025,.32]],mat,0,0,0);
  if(kind==='사과'||kind==='귤')turned(root,[[.015,0],[.018,.04],[.009,.09]],material(0x524733),0,.32,0);
